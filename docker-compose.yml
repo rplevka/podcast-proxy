@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  podcast-proxy:
+    build: .
+    container_name: podcast-rss-proxy
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - BASE_URL=http://fero.plevka.cz  # Change this to your public URL (e.g., https://podcasts.example.com)
+      - DOWNLOAD_ON_DEMAND=True
+      - DB_PATH=/app/data/podcasts.db
+      - DOWNLOADS_DIR=/app/downloads
+    volumes:
+      - ./appdata/downloads:/app/downloads:z
+      - ./appdata:/app/data:z
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3000')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
