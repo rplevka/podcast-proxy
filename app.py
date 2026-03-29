@@ -10,6 +10,7 @@ from downloader import Downloader
 from rss_generator import RSSGenerator
 from download_manager import DownloadManager
 from file_watcher import start_file_watcher
+from audio_validator import AudioValidator
 import config
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -21,6 +22,7 @@ rss_sync = RSSSync(db)
 download_manager = DownloadManager()
 downloader = Downloader(db, download_manager)
 rss_generator = RSSGenerator(db)
+audio_validator = AudioValidator()
 
 file_observer = start_file_watcher(db)
 
@@ -161,13 +163,31 @@ def serve_episode(episode_id):
         response = requests.get(episode['original_url'], stream=True, verify=False, headers=headers)
         response.raise_for_status()
         
+        content_type = response.headers.get('Content-Type', 'audio/mpeg')
+        content_length = int(response.headers.get('Content-Length', 0))
+        
+        ct_valid, ct_msg = audio_validator.validate_content_type(content_type)
+        if not ct_valid:
+            return jsonify({'error': f'Invalid content type: {ct_msg}'}), 400
+        
+        if content_length > 0:
+            size_valid, size_msg = audio_validator.validate_file_size(content_length)
+            if not size_valid:
+                return jsonify({'error': f'Invalid file size: {size_msg}'}), 400
+        
         def generate():
+            first_chunk = True
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
+                    if first_chunk:
+                        magic_valid, magic_msg = audio_validator.validate_magic_bytes(chunk)
+                        if not magic_valid:
+                            print(f"Warning: Audio validation failed during stream: {magic_msg}")
+                        first_chunk = False
                     yield chunk
         
         return Response(generate(), mimetype='audio/mpeg', headers={
-            'Content-Type': response.headers.get('Content-Type', 'audio/mpeg'),
+            'Content-Type': content_type,
             'Content-Length': response.headers.get('Content-Length', ''),
             'Accept-Ranges': 'bytes'
         })

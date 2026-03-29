@@ -1,5 +1,8 @@
 # Podcast RSS Proxy
 
+[![Run Tests](https://github.com/rplevka/podcast-rss-proxy/actions/workflows/test.yml/badge.svg)](https://github.com/rplevka/podcast-rss-proxy/actions/workflows/test.yml)
+[![Build and Push Docker Image](https://github.com/rplevka/podcast-rss-proxy/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/rplevka/podcast-rss-proxy/actions/workflows/build-and-push.yml)
+
 A Python-based web server that acts as a podcast RSS proxy. It allows you to add multiple podcast RSS feeds, automatically syncs episodes, downloads them on-demand (acting as a cache), and regenerates new RSS feeds pointing to the cached files.
 
 ## Features
@@ -10,8 +13,6 @@ A Python-based web server that acts as a podcast RSS proxy. It allows you to add
 - **RSS Regeneration**: Generates new RSS feeds pointing to cached episodes
 - **Modern Web UI**: Beautiful interface to manage feeds and episodes
 - **RESTful API**: Full API for programmatic access
-
-## Installation
 
 ### Option 1: Docker (Recommended)
 
@@ -119,6 +120,52 @@ export BASE_URL=http://your-domain.com:8080
 python app.py
 ```
 
+## Security & Validation
+
+The proxy includes multi-layer audio file validation to protect against malicious content:
+
+### Validation Layers
+
+1. **Content-Type Validation** (before download)
+   - Checks HTTP Content-Type header against allowed audio MIME types
+   - Allowed types: `audio/mpeg`, `audio/mp3`, `audio/mp4`, `audio/m4a`, `audio/aac`, `audio/ogg`, `audio/opus`, `audio/wav`, `audio/flac`, `audio/webm`
+
+2. **File Size Validation**
+   - Enforces maximum file size limit (default: 500MB)
+   - Prevents downloading excessively large files
+
+3. **Magic Bytes Validation** (first chunk)
+   - Validates audio file format by checking magic bytes in file header
+   - Detects: MP3 (ID3, MPEG frames), MP4/M4A, OGG, WAV, FLAC
+   - Runs during streaming and downloading
+
+4. **Post-Download Validation** (uses puremagic)
+   - Pure Python file type detection with deep scanning
+   - Validates complete downloaded files before marking as cached
+   - Content-aware analysis for accurate format identification
+
+### Configuration
+
+The validator is automatically enabled for both:
+- **Streaming**: Validates on-the-fly when proxying episodes
+- **Downloads**: Validates before savinratog
+├── audio_valid tor.py  # Audio file secu ity validationdisk
+
+To customize validation limits, modify `audio_validator.py`:
+```python
+MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB default
+```
+
+
+Thevaldatr uses `puremgic` f:
+-PureP iplementton (no C dependenee)per file inspection, install `python-magic-bin`:
+-bCosent-warefrt deteto
+- Supportlajor udo formt
+-Automtc eep scnngnifia
+
+gacefully falls bacn if puremagic is ot available
+This enables libmagic-based validation for more accurate file type detection. The system works without it using basic magic bytes validation.
+
 ## API Endpoints
 
 ### Feeds
@@ -133,7 +180,9 @@ python app.py
 - `POST /api/episodes/{id}/download` - Download an episode
 - `GET /episode/{id}/download` - Stream/download episode file
 
-### RSS
+### RSSdict
+- watchog
+- python-magic-bin (optonal, for enhaned validaion)
 - `GET /feed/{id}/rss.xml` - Get regenerated RSS feed
 
 ## Project Structure
@@ -176,6 +225,75 @@ podcast-rss-proxy/
 - feedparser
 - requests
 - xmltodict
+- watchdog
+- puremagic (for enhanced file validation)
+
+## CI/CD
+
+The project uses GitHub Actions for continuous integration and deployment.
+
+### Workflows
+
+#### Test Workflow (`.github/workflows/test.yml`)
+- **Triggers**: Push to main, pull requests, manual dispatch
+- **Matrix testing**: Python 3.9, 3.10, 3.11, 3.12, 3.13
+- **Steps**:
+  - Runs full test suite with pytest
+  - Generates coverage report (Python 3.13 only)
+  - Uploads coverage to Codecov
+- **Status**: Required to pass before Docker image build
+
+#### Build and Push Workflow (`.github/workflows/build-and-push.yml`)
+- **Triggers**: 
+  - Push to main (after tests pass)
+  - Version tags (v*)
+  - Manual dispatch
+  - After test workflow completes successfully
+- **Steps**:
+  - Builds multi-platform Docker image (amd64, arm64)
+  - Pushes to GitHub Container Registry (ghcr.io)
+  - Tags with branch name, SHA, and version
+- **Dependency**: Only runs if tests pass or manually triggered
+
+### Workflow Dependencies
+
+```
+Push to main → Run Tests → Build and Push Docker Image → ghcr.io
+```
+
+The build workflow will not run if tests fail, ensuring only validated code is deployed.
+
+## Testing
+
+The project includes a comprehensive test suite for the audio validator.
+
+### Run Tests
+
+```bash
+# Install dependencies including pytest
+pip install -r requirements.txt
+
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage
+pip install pytest-cov
+pytest --cov=audio_validator --cov-report=html
+```
+
+See [TESTING.md](TESTING.md) for detailed testing documentation.
+
+### Test Coverage
+
+- **60+ test cases** covering all validation scenarios
+- Content-Type validation (12 MIME types)
+- Magic bytes validation (8 audio formats)
+- File size limits and boundaries
+- Edge cases and error conditions
+- Integration tests with real files
 
 ## License
 

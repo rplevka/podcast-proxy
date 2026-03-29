@@ -3,3 +3,5 @@ feedparser==6.0.11
 requests==2.31.0
 xmltodict==0.13.0
 watchdog==3.0.0
+puremagic==1.28
+pytest==7.4.3

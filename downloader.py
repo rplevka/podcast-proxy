@@ -3,12 +3,14 @@ import requests
 from pathlib import Path
 from typing import Optional
 from database import PodcastDatabase
+from audio_validator import AudioValidator
 import config
 
 class Downloader:
     def __init__(self, database: PodcastDatabase, download_manager=None):
         self.db = database
         self.download_manager = download_manager
+        self.validator = AudioValidator()
         self.ensure_downloads_dir()
     
     def ensure_downloads_dir(self):
@@ -43,19 +45,45 @@ class Downloader:
             response.raise_for_status()
             
             total_size = int(response.headers.get('content-length', 0))
+            content_type = response.headers.get('content-type', '')
+            
+            ct_valid, ct_msg = self.validator.validate_content_type(content_type)
+            if not ct_valid:
+                raise ValueError(f"Content validation failed: {ct_msg}")
+            
+            if total_size > 0:
+                size_valid, size_msg = self.validator.validate_file_size(total_size)
+                if not size_valid:
+                    raise ValueError(f"File size validation failed: {size_msg}")
+            
             if self.download_manager and total_size > 0:
                 self.download_manager.start_download(episode_id, total_size)
             
             downloaded = 0
+            first_chunk = None
             with open(local_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
+                        if first_chunk is None:
+                            first_chunk = chunk
+                            magic_valid, magic_msg = self.validator.validate_magic_bytes(chunk)
+                            if not magic_valid:
+                                raise ValueError(f"Audio validation failed: {magic_msg}")
+                        
                         f.write(chunk)
                         downloaded += len(chunk)
                         if self.download_manager:
                             self.download_manager.update_progress(episode_id, downloaded)
             
             file_size = os.path.getsize(local_path)
+            
+            file_valid, file_msg = self.validator.validate_downloaded_file(local_path)
+            if not file_valid:
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                raise ValueError(f"Downloaded file validation failed: {file_msg}")
+            
+            print(f"File validation passed: {file_msg}")
             self.db.mark_episode_downloaded(episode_id, local_path, file_size)
             
             if self.download_manager:
