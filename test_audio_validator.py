@@ -203,15 +203,10 @@ class TestAudioValidator:
         
         try:
             valid, msg = validator.validate_downloaded_file(temp_path)
-            # With puremagic, fake MP3 files are correctly rejected
-            # Magic bytes pass but puremagic deep scan fails
-            if validator.has_puremagic:
-                assert valid is False
-                assert 'puremagic' in msg.lower()
-            else:
-                # Without puremagic, basic magic bytes validation passes
-                assert valid is True
-                assert 'audio/mpeg' in msg
+            # Both with and without puremagic, files with ID3 headers pass
+            # puremagic validates based on magic bytes/headers, not deep audio stream validation
+            assert valid is True
+            assert 'audio/mpeg' in msg
         finally:
             os.unlink(temp_path)
     
@@ -352,11 +347,8 @@ class TestAudioValidatorIntegration:
         
         try:
             valid, msg = validator.validate_downloaded_file(temp_path)
-            # With puremagic, fake MP3 files are correctly rejected
-            if validator.has_puremagic:
-                assert valid is False
-            else:
-                # Without puremagic, basic magic bytes validation passes
-                assert valid is True
+            # Both with and without puremagic, files with ID3 headers pass
+            # puremagic validates based on magic bytes/headers, not deep audio stream validation
+            assert valid is True
         finally:
             os.unlink(temp_path)

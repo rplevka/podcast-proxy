@@ -82,13 +82,13 @@ class AudioValidator:
                 return False, "puremagic could not identify file type"
             
             for result in results:
-                mime_type = result[1] if len(result) > 1 else None
+                mime_type = getattr(result, 'mime_type', None)
                 if mime_type and mime_type in self.ALLOWED_MIME_TYPES:
-                    confidence = result[3] if len(result) > 3 else 0
+                    confidence = getattr(result, 'confidence', 0)
                     return True, f"Valid audio file (puremagic): {mime_type} (confidence: {confidence})"
             
             best_match = results[0]
-            mime_type = best_match[1] if len(best_match) > 1 else "unknown"
+            mime_type = getattr(best_match, 'mime_type', "unknown")
             return False, f"Invalid file type (puremagic): {mime_type}"
         except Exception as e:
             return False, f"puremagic validation error: {str(e)}"
