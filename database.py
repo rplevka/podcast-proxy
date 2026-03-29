@@ -1,166 +1,96 @@
-import sqlite3
 import time
 from typing import Optional, List, Dict, Any
+from models import db, Feed, Episode, DownloadStatus
+from email.utils import parsedate_to_datetime
 
 class PodcastDatabase:
-    def __init__(self, db_path: str):
-        self.db_path = db_path
-        self.init_db()
-    
-    def get_connection(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
-    
-    def init_db(self):
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS feeds (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                original_url TEXT UNIQUE NOT NULL,
-                title TEXT,
-                description TEXT,
-                image_url TEXT,
-                last_synced INTEGER,
-                created_at INTEGER DEFAULT (strftime('%s', 'now'))
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS episodes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                feed_id INTEGER NOT NULL,
-                guid TEXT NOT NULL,
-                title TEXT,
-                description TEXT,
-                pub_date TEXT,
-                duration TEXT,
-                original_url TEXT,
-                local_path TEXT,
-                file_size INTEGER,
-                downloaded INTEGER DEFAULT 0,
-                created_at INTEGER DEFAULT (strftime('%s', 'now')),
-                FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE,
-                UNIQUE(feed_id, guid)
-            )
-        ''')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_episodes_feed_id ON episodes(feed_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_episodes_guid ON episodes(guid)')
-        
-        conn.commit()
-        conn.close()
+    def __init__(self, db_path: str = None):
+        pass
     
     def add_feed(self, url: str, metadata: Optional[Dict[str, Any]] = None) -> int:
         if metadata is None:
             metadata = {}
         
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        feed = Feed.query.filter_by(original_url=url).first()
         
-        cursor.execute('''
-            INSERT INTO feeds (original_url, title, description, image_url)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(original_url) DO UPDATE SET
-                title = excluded.title,
-                description = excluded.description,
-                image_url = excluded.image_url
-        ''', (
-            url,
-            metadata.get('title'),
-            metadata.get('description'),
-            metadata.get('image_url')
-        ))
+        if feed:
+            feed.title = metadata.get('title') or feed.title
+            feed.description = metadata.get('description') or feed.description
+            feed.image_url = metadata.get('image_url') or feed.image_url
+            if 'price' in metadata:
+                feed.price = metadata.get('price')
+            if 'currency' in metadata:
+                feed.currency = metadata.get('currency')
+        else:
+            feed = Feed(
+                original_url=url,
+                title=metadata.get('title'),
+                description=metadata.get('description'),
+                image_url=metadata.get('image_url'),
+                price=metadata.get('price'),
+                currency=metadata.get('currency', 'USD')
+            )
+            db.session.add(feed)
         
-        feed_id = cursor.lastrowid
-        if feed_id == 0:
-            cursor.execute('SELECT id FROM feeds WHERE original_url = ?', (url,))
-            feed_id = cursor.fetchone()[0]
-        
-        conn.commit()
-        conn.close()
-        return feed_id
+        db.session.commit()
+        return feed.id
     
     def get_feeds(self) -> List[Dict[str, Any]]:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM feeds ORDER BY created_at DESC')
-        feeds = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return feeds
+        feeds = Feed.query.order_by(Feed.created_at.desc()).all()
+        return [feed.to_dict() for feed in feeds]
     
     def get_feed(self, feed_id: int) -> Optional[Dict[str, Any]]:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM feeds WHERE id = ?', (feed_id,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        feed = Feed.query.get(feed_id)
+        return feed.to_dict() if feed else None
     
     def get_feed_by_url(self, url: str) -> Optional[Dict[str, Any]]:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM feeds WHERE original_url = ?', (url,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        feed = Feed.query.filter_by(original_url=url).first()
+        return feed.to_dict() if feed else None
     
     def delete_feed(self, feed_id: int):
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM feeds WHERE id = ?', (feed_id,))
-        conn.commit()
-        conn.close()
+        feed = Feed.query.get(feed_id)
+        if feed:
+            db.session.delete(feed)
+            db.session.commit()
     
     def update_feed_sync(self, feed_id: int):
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('UPDATE feeds SET last_synced = ? WHERE id = ?', 
-                      (int(time.time()), feed_id))
-        conn.commit()
-        conn.close()
+        feed = Feed.query.get(feed_id)
+        if feed:
+            feed.last_synced = int(time.time())
+            db.session.commit()
     
     def add_episode(self, feed_id: int, episode: Dict[str, Any]):
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        existing = Episode.query.filter_by(
+            feed_id=feed_id, 
+            guid=episode['guid']
+        ).first()
         
-        cursor.execute('''
-            INSERT INTO episodes (
-                feed_id, guid, title, description, pub_date, duration, original_url, file_size
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(feed_id, guid) DO UPDATE SET
-                title = excluded.title,
-                description = excluded.description,
-                pub_date = excluded.pub_date,
-                duration = excluded.duration,
-                original_url = excluded.original_url,
-                file_size = excluded.file_size
-        ''', (
-            feed_id,
-            episode['guid'],
-            episode.get('title'),
-            episode.get('description'),
-            episode.get('pub_date'),
-            episode.get('duration'),
-            episode['url'],
-            episode.get('file_size')
-        ))
+        if existing:
+            existing.title = episode.get('title')
+            existing.description = episode.get('description')
+            existing.pub_date = episode.get('pub_date')
+            existing.duration = episode.get('duration')
+            existing.original_url = episode['url']
+            existing.file_size = episode.get('file_size')
+        else:
+            new_episode = Episode(
+                feed_id=feed_id,
+                guid=episode['guid'],
+                title=episode.get('title'),
+                description=episode.get('description'),
+                pub_date=episode.get('pub_date'),
+                duration=episode.get('duration'),
+                original_url=episode['url'],
+                file_size=episode.get('file_size')
+            )
+            db.session.add(new_episode)
         
-        conn.commit()
-        conn.close()
+        db.session.commit()
     
     def get_episodes(self, feed_id: int) -> List[Dict[str, Any]]:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        # Get all episodes and sort in Python since RFC 2822 parsing in SQLite is complex
-        cursor.execute('SELECT * FROM episodes WHERE feed_id = ?', (feed_id,))
-        episodes = [dict(row) for row in cursor.fetchall()]
-        conn.close()
+        episodes = Episode.query.filter_by(feed_id=feed_id).all()
+        episode_dicts = [ep.to_dict() for ep in episodes]
         
-        # Sort by pub_date (newest first), handling RFC 2822 format
-        from email.utils import parsedate_to_datetime
         def get_sort_key(ep):
             try:
                 if ep.get('pub_date'):
@@ -169,33 +99,41 @@ class PodcastDatabase:
             except:
                 return 0
         
-        episodes.sort(key=get_sort_key, reverse=True)
-        return episodes
+        episode_dicts.sort(key=get_sort_key, reverse=True)
+        return episode_dicts
     
     def get_episode(self, episode_id: int) -> Optional[Dict[str, Any]]:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM episodes WHERE id = ?', (episode_id,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        episode = Episode.query.get(episode_id)
+        return episode.to_dict() if episode else None
     
     def get_episode_by_guid(self, feed_id: int, guid: str) -> Optional[Dict[str, Any]]:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM episodes WHERE feed_id = ? AND guid = ?', 
-                      (feed_id, guid))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        episode = Episode.query.filter_by(feed_id=feed_id, guid=guid).first()
+        return episode.to_dict() if episode else None
+    
+    def mark_episode_downloading(self, episode_id: int):
+        episode = Episode.query.get(episode_id)
+        if episode:
+            episode.download_status = DownloadStatus.IN_PROGRESS
+            db.session.commit()
     
     def mark_episode_downloaded(self, episode_id: int, local_path: str, file_size: int):
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE episodes 
-            SET downloaded = 1, local_path = ?, file_size = ?
-            WHERE id = ?
-        ''', (local_path, file_size, episode_id))
-        conn.commit()
-        conn.close()
+        episode = Episode.query.get(episode_id)
+        if episode:
+            episode.downloaded = 1
+            episode.download_status = DownloadStatus.DOWNLOADED
+            episode.local_path = local_path
+            episode.file_size = file_size
+            db.session.commit()
+    
+    def mark_episode_download_failed(self, episode_id: int):
+        episode = Episode.query.get(episode_id)
+        if episode:
+            episode.download_status = DownloadStatus.NOT_DOWNLOADED
+            db.session.commit()
+    
+    def get_in_progress_downloads(self) -> List[Dict[str, Any]]:
+        episodes = Episode.query.filter_by(download_status=DownloadStatus.IN_PROGRESS).all()
+        return [ep.to_dict() for ep in episodes]
+    
+    def get_connection(self):
+        return db.session

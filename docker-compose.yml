@@ -12,6 +12,7 @@ services:
       - DOWNLOAD_ON_DEMAND=True
       - DB_PATH=/app/data/podcasts.db
       - DOWNLOADS_DIR=/app/downloads
+      - MOTD="ČO E!?"
     volumes:
       - ./appdata/downloads:/app/downloads:z
       - ./appdata:/app/data:z

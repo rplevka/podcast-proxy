@@ -2,6 +2,7 @@ import os
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from database import PodcastDatabase
+from models import Episode, DownloadStatus
 import config
 
 class DownloadsDirHandler(FileSystemEventHandler):
@@ -16,31 +17,20 @@ class DownloadsDirHandler(FileSystemEventHandler):
         deleted_path = event.src_path
         print(f"File deleted: {deleted_path}")
         
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            "SELECT id, title FROM episodes WHERE local_path = ? AND downloaded = 1",
-            (deleted_path,)
-        )
-        
-        episode = cursor.fetchone()
+        episode = Episode.query.filter_by(local_path=deleted_path, downloaded=1).first()
         
         if episode:
-            episode_id = episode["id"]
-            episode_title = episode["title"]
+            episode_title = episode.title
+            episode.downloaded = 0
+            episode.download_status = DownloadStatus.NOT_DOWNLOADED
+            episode.local_path = None
+            episode.file_size = None
             
-            cursor.execute(
-                "UPDATE episodes SET downloaded = 0, local_path = NULL, file_size = NULL WHERE id = ?",
-                (episode_id,)
-            )
-            
-            conn.commit()
+            from models import db
+            db.session.commit()
             print(f"  Marked episode as not downloaded: {episode_title}")
         else:
             print(f"  No matching episode found in database for path: {deleted_path}")
-        
-        conn.close()
 
 def start_file_watcher(database):
     if not os.path.exists(config.DOWNLOADS_DIR):

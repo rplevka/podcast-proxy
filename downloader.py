@@ -27,6 +27,8 @@ class Downloader:
         
         print(f"Downloading episode {episode_id}: {episode['title']}")
         
+        self.db.mark_episode_downloading(episode_id)
+        
         feed_dir = os.path.join(config.DOWNLOADS_DIR, str(episode['feed_id']))
         os.makedirs(feed_dir, exist_ok=True)
         
@@ -95,6 +97,7 @@ class Downloader:
         except Exception as e:
             if os.path.exists(local_path):
                 os.remove(local_path)
+            self.db.mark_episode_download_failed(episode_id)
             print(f"Error downloading episode {episode_id}: {str(e)}")
             raise
     

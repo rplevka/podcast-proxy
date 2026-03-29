@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Podcast RSS Proxy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center">
+    <div class="container mx-auto px-4 max-w-md">
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <div class="text-center mb-8">
+                <h1 id="motd" class="text-3xl font-bold text-gray-900 mb-2">Podcast Proxy</h1>
+                <p class="text-gray-600">Create your account</p>
+            </div>
+
+            <form id="registerForm" class="space-y-6">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-2">
+                        Username
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="user" class="w-5 h-5 text-gray-400"></i>
+                        </div>
+                        <input 
+                            type="text" 
+                            id="username" 
+                            required
+                            class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Choose a username"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                        Password
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="lock" class="w-5 h-5 text-gray-400"></i>
+                        </div>
+                        <input 
+                            type="password" 
+                            id="password" 
+                            required
+                            class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Choose a password"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label for="confirmPassword" class="block text-sm font-medium text-gray-700 mb-2">
+                        Confirm Password
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="lock" class="w-5 h-5 text-gray-400"></i>
+                        </div>
+                        <input 
+                            type="password" 
+                            id="confirmPassword" 
+                            required
+                            class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Confirm your password"
+                        />
+                    </div>
+                </div>
+
+                <input type="hidden" id="invitationToken" />
+
+                <button 
+                    type="submit"
+                    class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2"
+                >
+                    <i data-lucide="user-plus" class="w-5 h-5"></i>
+                    Create Account
+                </button>
+            </form>
+
+            <div id="errorMessage" class="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg hidden">
+                <p class="text-sm"></p>
+            </div>
+
+            <div class="mt-6 text-center">
+                <a href="/login" class="text-sm text-blue-600 hover:text-blue-700">
+                    Already have an account? Sign in
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadMotd() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                if (config.motd) {
+                    document.getElementById('motd').textContent = config.motd;
+                }
+            } catch (error) {
+                console.error('Error loading MOTD:', error);
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.querySelector('p').textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+        }
+
+        // Get invitation token from URL
+        function getTokenFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            
+            if (!token) {
+                showError('No invitation token provided. Please use the invitation link you received.');
+                document.getElementById('registerForm').querySelector('button[type="submit"]').disabled = true;
+                return null;
+            }
+            
+            document.getElementById('invitationToken').value = token;
+            return token;
+        }
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const invitationToken = document.getElementById('invitationToken').value;
+
+            if (!username || !password || !confirmPassword) {
+                showError('Please fill in all fields');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                showError('Passwords do not match');
+                return;
+            }
+
+            if (password.length < 6) {
+                showError('Password must be at least 6 characters long');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        username, 
+                        password, 
+                        invitation_token: invitationToken 
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Registration failed');
+                }
+
+                // Registration successful, redirect to main page
+                window.location.href = '/';
+            } catch (error) {
+                showError(error.message);
+            }
+        });
+
+        // Initialize
+        getTokenFromUrl();
+        loadMotd();
+        lucide.createIcons();
+    </script>
+</body>
+</html>
