@@ -313,8 +313,32 @@
 
         function copyRSSUrl(feedId) {
             const url = `${window.location.origin}/feed/${feedId}/rss.xml`;
-            navigator.clipboard.writeText(url);
-            showToast('RSS URL copied to clipboard!', 'success');
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url)
+                    .then(() => showToast('RSS URL copied to clipboard!', 'success'))
+                    .catch(() => fallbackCopy(url));
+            } else {
+                fallbackCopy(url);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            
+            try {
+                document.execCommand('copy');
+                showToast('RSS URL copied to clipboard!', 'success');
+            } catch (err) {
+                showToast('Failed to copy. Please copy manually.', 'error');
+            }
+            
+            document.body.removeChild(textarea);
         }
 
         function renderFeeds() {
@@ -354,10 +378,6 @@
                             <button onclick="syncFeed(${feed.id})" class="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition flex items-center gap-1 text-sm">
                                 <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                                 Sync
-                            </button>
-                            <button onclick="copyRSSUrl(${feed.id})" class="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 transition flex items-center gap-1 text-sm">
-                                <i data-lucide="copy" class="w-4 h-4"></i>
-                                Copy RSS URL
                             </button>
                             <button onclick="deleteFeed(${feed.id})" class="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 transition flex items-center gap-1 text-sm">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -440,6 +460,12 @@
             if (e.key === 'Enter') addFeed();
         });
 
+        loadConfig();
+        loadFeeds();
+        lucide.createIcons();
+    </script>
+</body>
+</html>
         loadConfig();
         loadFeeds();
         lucide.createIcons();
