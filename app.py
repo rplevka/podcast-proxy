@@ -26,9 +26,28 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{config.DB_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'connect_args': {
+        'timeout': 30,
+        'check_same_thread': False
+    },
+    'pool_pre_ping': True,
+    'pool_recycle': 3600,
+}
 
 db.init_app(app)
 migrate = Migrate(app, db)
+
+@app.before_request
+def enable_wal_mode():
+    """Enable SQLite WAL mode for better concurrency on first request."""
+    if not hasattr(app, '_wal_enabled'):
+        with app.app_context():
+            db.session.execute(db.text('PRAGMA journal_mode=WAL'))
+            db.session.execute(db.text('PRAGMA busy_timeout=30000'))
+            db.session.execute(db.text('PRAGMA synchronous=NORMAL'))
+            db.session.commit()
+        app._wal_enabled = True
 
 # Initialize Flask-Login
 login_manager = LoginManager()

@@ -59,7 +59,7 @@ class PodcastDatabase:
             feed.last_synced = int(time.time())
             db.session.commit()
     
-    def add_episode(self, feed_id: int, episode: Dict[str, Any]):
+    def add_episode(self, feed_id: int, episode: Dict[str, Any], commit: bool = True):
         existing = Episode.query.filter_by(
             feed_id=feed_id, 
             guid=episode['guid']
@@ -85,7 +85,8 @@ class PodcastDatabase:
             )
             db.session.add(new_episode)
         
-        db.session.commit()
+        if commit:
+            db.session.commit()
     
     def get_episodes(self, feed_id: int) -> List[Dict[str, Any]]:
         episodes = Episode.query.filter_by(feed_id=feed_id).all()

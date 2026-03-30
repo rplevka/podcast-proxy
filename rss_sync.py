@@ -50,8 +50,12 @@ class RSSSync:
                     'file_size': enclosure.get('length')
                 }
                 
-                self.db.add_episode(feed_id, episode)
+                self.db.add_episode(feed_id, episode, commit=False)
                 episode_count += 1
+            
+            # Commit all episodes at once to reduce database locks
+            from models import db
+            db.session.commit()
             
             self.db.update_feed_sync(feed_id)
             print(f"Synced {episode_count} episodes for feed {feed_id}")
