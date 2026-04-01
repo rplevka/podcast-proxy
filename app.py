@@ -313,6 +313,18 @@ def serve_episode(episode_id):
         if episode['downloaded'] and episode['local_path'] and os.path.exists(episode['local_path']):
             return send_file(episode['local_path'], as_attachment=False)
         
+        # If DOWNLOAD_ON_DEMAND is enabled and episode is not cached, trigger background download
+        if config.DOWNLOAD_ON_DEMAND and episode['download_status'] != 'in_progress':
+            def download_in_background():
+                with app.app_context():
+                    try:
+                        downloader.download_episode(episode_id)
+                    except Exception as e:
+                        print(f"Background download error for episode {episode_id}: {e}")
+            
+            thread = threading.Thread(target=download_in_background, daemon=True)
+            thread.start()
+        
         headers = {
             'User-Agent': 'Mozilla/5.0 (compatible; ferorss/1.0)'
         }
