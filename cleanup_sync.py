@@ -24,7 +24,7 @@ def sync_database_with_filesystem():
                     print(f"File missing: {episode['local_path']}")
                     print(f"  Episode: {episode['title']}")
                     
-                    ep = Episode.query.get(episode['id'])
+                    ep = db.session.get(Episode, episode['id'])
                     if ep:
                         ep.downloaded = 0
                         ep.download_status = DownloadStatus.NOT_DOWNLOADED

@@ -56,7 +56,7 @@ login_manager.login_view = None  # We're using API, not redirects
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 @login_manager.unauthorized_handler
 def unauthorized():
@@ -126,7 +126,7 @@ def add_feed():
         
         feed_id = podcast_db.add_feed(url, metadata)
         
-        feed_obj = Feed.query.get(feed_id)
+        feed_obj = db.session.get(Feed, feed_id)
         if feed_obj:
             feed_obj.owner_id = current_user.id
             db.session.commit()
@@ -164,7 +164,7 @@ def get_feed(feed_id):
 @app.route('/api/feeds/<int:feed_id>', methods=['PATCH'])
 @poweruser_required
 def update_feed(feed_id):
-    feed_obj = Feed.query.get(feed_id)
+    feed_obj = db.session.get(Feed, feed_id)
     
     if not feed_obj:
         return jsonify({'error': 'Feed not found'}), 404
@@ -199,7 +199,7 @@ def update_feed(feed_id):
 @app.route('/api/feeds/<int:feed_id>', methods=['DELETE'])
 @poweruser_required
 def delete_feed(feed_id):
-    feed_obj = Feed.query.get(feed_id)
+    feed_obj = db.session.get(Feed, feed_id)
     
     if not feed_obj:
         return jsonify({'error': 'Feed not found'}), 404
@@ -276,7 +276,7 @@ def cleanup_database():
                     total_checked += 1
                     
                     if not os.path.exists(episode['local_path']):
-                        ep = Episode.query.get(episode['id'])
+                        ep = db.session.get(Episode, episode['id'])
                         if ep:
                             ep.downloaded = 0
                             ep.local_path = None

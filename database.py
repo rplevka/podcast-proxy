@@ -40,7 +40,7 @@ class PodcastDatabase:
         return [feed.to_dict() for feed in feeds]
     
     def get_feed(self, feed_id: int) -> Optional[Dict[str, Any]]:
-        feed = Feed.query.get(feed_id)
+        feed = db.session.get(Feed, feed_id)
         return feed.to_dict() if feed else None
     
     def get_feed_by_url(self, url: str) -> Optional[Dict[str, Any]]:
@@ -48,13 +48,13 @@ class PodcastDatabase:
         return feed.to_dict() if feed else None
     
     def delete_feed(self, feed_id: int):
-        feed = Feed.query.get(feed_id)
+        feed = db.session.get(Feed, feed_id)
         if feed:
             db.session.delete(feed)
             db.session.commit()
     
     def update_feed_sync(self, feed_id: int):
-        feed = Feed.query.get(feed_id)
+        feed = db.session.get(Feed, feed_id)
         if feed:
             feed.last_synced = int(time.time())
             db.session.commit()
@@ -104,7 +104,7 @@ class PodcastDatabase:
         return episode_dicts
     
     def get_episode(self, episode_id: int) -> Optional[Dict[str, Any]]:
-        episode = Episode.query.get(episode_id)
+        episode = db.session.get(Episode, episode_id)
         return episode.to_dict() if episode else None
     
     def get_episode_by_guid(self, feed_id: int, guid: str) -> Optional[Dict[str, Any]]:
@@ -112,13 +112,13 @@ class PodcastDatabase:
         return episode.to_dict() if episode else None
     
     def mark_episode_downloading(self, episode_id: int):
-        episode = Episode.query.get(episode_id)
+        episode = db.session.get(Episode, episode_id)
         if episode:
             episode.download_status = DownloadStatus.IN_PROGRESS
             db.session.commit()
     
     def mark_episode_downloaded(self, episode_id: int, local_path: str, file_size: int):
-        episode = Episode.query.get(episode_id)
+        episode = db.session.get(Episode, episode_id)
         if episode:
             episode.downloaded = 1
             episode.download_status = DownloadStatus.DOWNLOADED
@@ -127,7 +127,7 @@ class PodcastDatabase:
             db.session.commit()
     
     def mark_episode_download_failed(self, episode_id: int):
-        episode = Episode.query.get(episode_id)
+        episode = db.session.get(Episode, episode_id)
         if episode:
             episode.download_status = DownloadStatus.NOT_DOWNLOADED
             db.session.commit()
