@@ -12,6 +12,7 @@ services:
       - DOWNLOAD_ON_DEMAND=True
       - DB_PATH=/app/data/podcasts.db
       - DOWNLOADS_DIR=/app/downloads
+      - SYNC_INTERVAL=3600
       - MOTD="ČO E!?"
     volumes:
       - ./appdata/downloads:/app/downloads:z

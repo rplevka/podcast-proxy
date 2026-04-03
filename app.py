@@ -143,6 +143,20 @@ def get_feed(feed_id):
     if not feed:
         return jsonify({'error': 'Feed not found'}), 404
     
+    # Add proxy URL with user's access token
+    if current_user.is_authenticated:
+        feed['proxy_url'] = f"{config.BASE_URL}/feed/{current_user.access_token}/rss.xml?feed_id={feed['id']}"
+        
+        # Hide original URL from non-owners and non-admins
+        is_owner = feed.get('owner_id') == current_user.id
+        is_admin = current_user.role == UserRole.ADMIN
+        
+        if not is_owner and not is_admin:
+            feed['original_url'] = None
+    else:
+        feed['proxy_url'] = None
+        feed['original_url'] = None
+    
     episodes = podcast_db.get_episodes(feed_id)
     feed['episodes'] = episodes
     return jsonify(feed)
@@ -471,10 +485,11 @@ def background_sync():
     while True:
         time.sleep(config.SYNC_INTERVAL)
         print("Running background sync...")
-        try:
-            rss_sync.sync_all_feeds()
-        except Exception as e:
-            print(f"Background sync error: {e}")
+        with app.app_context():
+            try:
+                rss_sync.sync_all_feeds()
+            except Exception as e:
+                print(f"Background sync error: {e}")
 
 if __name__ == '__main__':
     with app.app_context():
